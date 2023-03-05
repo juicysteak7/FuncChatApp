@@ -1,6 +1,5 @@
 # Haskell Chat (IRC) App
 This is a haskell stack application
-It is an internet relay chat application
 
 ### To Run Server
 Use the stack command "stack run server"
