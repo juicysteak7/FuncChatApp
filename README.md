@@ -1,4 +1,4 @@
-# newApp
+# Haskell Chat (IRC) App
 This is a haskell stack application
 It is an internet relay chat application
 
