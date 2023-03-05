@@ -11,10 +11,3 @@ main = do
     ["server"] -> mainServer
     ["client"] -> mainClient
     _ -> putStrLn "Invalid command. Usage: stack run <server/client>"
-    {--
-  putStrLn "Starting server..."
-  _ <- forkIO mainServer
-
-  putStrLn "Starting client..."
-  mainClient
-  --}
