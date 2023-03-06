@@ -28,6 +28,8 @@ Use the stack command "stack run client"
 
 /quit -- Allows client to disconnect from server
 
+/test -- Runs client side test suite
+
 ## Example Server Commands
 /sendTo BasketBall The Blazers are up by 10! -- Allows the server to send messages to a specified chat room
 
