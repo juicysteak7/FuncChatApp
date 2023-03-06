@@ -127,6 +127,11 @@ handleClient sock clientInfo = do
           modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
           sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
           loop
+        -- Lets client check current saved name
+        "/myName" -> do
+          let name = clientName currentClient
+          sendAll (clientSocket currentClient) (Byte.pack ("Your saved name is: " ++ name))
+          loop
         -- List all current client chat rooms
         "/myChatRooms" -> do
           sendAll (clientSocket currentClient) (Byte.pack (show (clientRooms currentClient)))
