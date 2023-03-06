@@ -23,6 +23,7 @@ mainClient = withSocketsDo $ do
 
 loop :: Socket -> IO ()
 loop sock = do
+  msgVar <- newMVar []
   putStrLn "Connected!"
 
   -- Get name from client
@@ -31,12 +32,12 @@ loop sock = do
 
   send sock $ Byte.pack $ "/init " ++ name
 
-  sendThread <- forkIO $ sendLoop sock
-  receiveLoop sock sendThread
+  sendThread <- forkIO $ sendLoop sock msgVar
+  receiveLoop sock sendThread msgVar
 
   -- sendLoop needs to be non-blocking IO so when server closes connection the client doen't hang
   where
-    sendLoop sock = do
+    sendLoop sock msgVar = do
       inputReady <- hWaitForInput stdin 0
       if inputReady
         then do
@@ -46,13 +47,17 @@ loop sock = do
             "/quit" -> do
              send sock $ Byte.pack "exit"
              putStrLn "Goodbye!"
+            -- Start the test suite
+            "/test" -> do
+              testJoinRooms sock msgVar
+              sendLoop sock msgVar
             -- Otherwise send message and loop
             _ -> do
               send sock $ Byte.pack msg
-              sendLoop sock
-      else do sendLoop sock
+              sendLoop sock msgVar
+      else do sendLoop sock msgVar
 
-    receiveLoop sock sendThread = do
+    receiveLoop sock sendThread msgVar = do
       response <- recv sock 1024
       let msg = Byte.unpack response
       if Byte.null response
@@ -67,4 +72,20 @@ loop sock = do
             -- Otherwise print message and loop
             _ -> do
               putStrLn msg
-              receiveLoop sock sendThread
+              modifyMVar_ msgVar (\messages -> return (msg : messages))
+              receiveLoop sock sendThread msgVar
+
+-- Test Functions
+testJoinRooms :: Socket -> MVar [String] -> IO ()
+testJoinRooms sock msgVar = do
+  let rooms = "Room1 Room2 1502 BasketBall ComputerScience"
+  let wordRooms = words rooms
+  send sock $ Byte.pack $ "/join " ++ rooms
+  send sock $ Byte.pack "/myChatRooms"
+  -- Need to wait for server response
+  threadDelay 1000000
+  messages <- readMVar msgVar
+  let lastMsg = read (head messages) :: [String]
+  if lastMsg == (wordRooms ++ ["General"])
+    then putStrLn "Test Passed"
+  else putStrLn "Test Failed"

@@ -108,7 +108,7 @@ handleClient sock clientInfo = do
           putStrLn (name ++ " has entered the server!")
           modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
           sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
-          sendAll (clientSocket currentClient) (Byte.pack "Join chat room [\"General\"].")
+          sendAll (clientSocket currentClient) (Byte.pack "Joined chat room [\"General\"].")
           loop
         -- Private message between two clients
         "/whisper" -> do
