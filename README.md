@@ -16,6 +16,8 @@ Use the stack command "stack run client"
 
 /name Bob -- Allows client to re-name themselves
 
+/myName -- Gets your saved name from the server
+
 /chatRooms -- Allows client to list all active chat rooms on server
 
 /myChatRooms -- Allows client to list thier own chat rooms
