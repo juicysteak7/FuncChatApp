@@ -31,12 +31,12 @@ loop sock = do
 
   send sock $ Byte.pack $ "/init " ++ name
 
-  sendThread <- forkIO $ sendLoop sock name
-  receiveLoop sock name sendThread
+  sendThread <- forkIO $ sendLoop sock
+  receiveLoop sock sendThread
 
   -- sendLoop needs to be non-blocking IO so when server closes connection the client doen't hang
   where
-    sendLoop sock name = do
+    sendLoop sock = do
       inputReady <- hWaitForInput stdin 0
       if inputReady
         then do
@@ -49,10 +49,10 @@ loop sock = do
             -- Otherwise send message and loop
             _ -> do
               send sock $ Byte.pack msg
-              sendLoop sock name
-      else do sendLoop sock name
+              sendLoop sock
+      else do sendLoop sock
 
-    receiveLoop sock name sendThread = do
+    receiveLoop sock sendThread = do
       response <- recv sock 1024
       let msg = Byte.unpack response
       if Byte.null response
@@ -67,4 +67,4 @@ loop sock = do
             -- Otherwise print message and loop
             _ -> do
               putStrLn msg
-              receiveLoop sock name sendThread
+              receiveLoop sock sendThread
