@@ -37,4 +37,6 @@ Use the stack command "stack run client"
 
 /disconnect Bob -- Allows the server to disconnect specific clients
 
+/disconnectAll -- Allows the server to disconnect all clients
+
 /quit -- Shuts down server.

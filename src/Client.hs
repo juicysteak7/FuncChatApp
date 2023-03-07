@@ -17,7 +17,8 @@ mainClient = withSocketsDo $ do
   sock <- socket AF_INET Stream defaultProtocol
 
   -- connect to the server
-  connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)
+  --connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)
+  connect sock $ SockAddrInet 3000 $ tupleToHostAddress (10, 200, 224, 219)
 
   -- read and send messages to the server until the user types "/quit"
   loop sock
@@ -52,6 +53,7 @@ loop sock = do
             "/test" -> do
               testJoinRooms sock msgVar
               testLeaveChatRooms sock msgVar
+              testChangeName sock msgVar
               sendLoop sock msgVar
             -- Otherwise send message and loop
             _ -> do
@@ -80,17 +82,35 @@ loop sock = do
 -- Test Functions
 testJoinRooms :: Socket -> MVar [String] -> IO ()
 testJoinRooms sock msgVar = do
-  let rooms = "Room1 Room2 1502 BasketBall ComputerScience"
-  let wordRooms = words rooms
-  send sock $ Byte.pack $ "/join " ++ rooms
   send sock $ Byte.pack "/myChatRooms"
   -- Need to wait for server response
   threadDelay 1000000
   messages <- readMVar msgVar
-  let lastMsg = read (head messages) :: [String]
-  if lastMsg == (wordRooms ++ ["General"])
-    then putStrLn "Test Join: Passed"
-  else putStrLn "Test Join: Failed"
+  let originalRooms = read (head messages) :: [String]
+  send sock $ Byte.pack "/join"
+  -- Need to wait for server response
+  threadDelay 1000000
+  send sock $ Byte.pack "/myChatRooms"
+  -- Need to wait for server response
+  threadDelay 1000000
+  messages' <- readMVar msgVar
+  let newRooms = read (head messages') :: [String]
+  if newRooms == originalRooms
+    then do
+      let rooms = "Room1 Room2 1502 BasketBall ComputerScience Testing"
+      let wordRooms = words rooms
+      send sock $ Byte.pack $ "/join " ++ rooms
+      -- Need to wait for server response
+      threadDelay 1000000
+      send sock $ Byte.pack "/myChatRooms"
+      -- Need to wait for server response
+      threadDelay 1000000
+      messages'' <- readMVar msgVar
+      let newRooms' = read (head messages'') :: [String]
+      if newRooms' == (wordRooms ++ originalRooms)
+        then putStrLn "Test Join: Passed"
+      else putStrLn "Test Join: Failed"
+    else putStrLn "Test Join: Failed"
 
 testLeaveChatRooms :: Socket -> MVar [String] -> IO ()
 testLeaveChatRooms sock msgVar = do
@@ -100,14 +120,63 @@ testLeaveChatRooms sock msgVar = do
   threadDelay 1000000
   messages <- readMVar msgVar
   let originalRooms = read (head messages) :: [String]
-  let rooms = "Room2 1502 BasketBall"
-  let wordRooms = words rooms
-  send sock $ Byte.pack $ "/leave " ++ rooms
+  send sock $ Byte.pack "/leave"
+  -- Wait for server response
+  threadDelay 1000000
   send sock $ Byte.pack command
   -- Wait for server response
   threadDelay 1000000
   messages' <- readMVar msgVar
   let newRooms = read (head messages') :: [String]
-  if newRooms == (originalRooms \\ wordRooms)
-    then putStrLn "Test Leave: Passed"
-  else putStrLn "Test Leave: Failed"
+  if newRooms == originalRooms
+    then do
+      let rooms = "Room2 1502 BasketBall Testing"
+      let wordRooms = words rooms
+      send sock $ Byte.pack $ "/leave " ++ rooms
+      -- Wait for server response
+      threadDelay 1000000
+      send sock $ Byte.pack command
+      -- Wait for server response
+      threadDelay 1000000
+      messages'' <- readMVar msgVar
+      let newRooms' = read (head messages'') :: [String]
+      if newRooms' == (originalRooms \\ wordRooms)
+        then putStrLn "Test Leave: Passed"
+      else putStrLn "Test Leave: Failed"
+    else putStrLn "Test Leave: Failed"
+
+testChangeName :: Socket -> MVar [String] -> IO ()
+testChangeName sock msgVar = do
+  let name = "This is a test"
+  send sock $ Byte.pack $ "/name " ++ name
+  -- Wait for server response
+  threadDelay 1000000
+  send sock $ Byte.pack "/myName"
+  -- Wait for server response
+  threadDelay 1000000
+  messages <- readMVar msgVar
+  let msg = drop (length (head messages) - length name) (head messages)
+  if msg == name
+    then do
+      let name' = "This is also a test. Testing... Testing..."
+      send sock $ Byte.pack $ "/name " ++ name'
+      -- Wait for server response
+      threadDelay 1000000
+      send sock $ Byte.pack "/myName"
+      -- Wait for server response
+      threadDelay 1000000
+      messages' <- readMVar msgVar
+      let msg' = drop (length (head messages') - length name') (head messages')
+      if msg' == name'
+        then do 
+          let name'' = ""
+          send sock $ Byte.pack $ "/name " ++ name''
+          -- Wait for server response
+          threadDelay 1000000
+          messages'' <- readMVar msgVar
+          let msg'' = head messages''
+          if msg'' == "Name was empty, save unsuccessfull."
+            then putStrLn "Test Name: Passed"
+          else putStrLn "Test Name: Failed"
+      else putStrLn "Test Name: Failed"
+  else putStrLn "Test Name: Failed"

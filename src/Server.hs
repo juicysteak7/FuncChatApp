@@ -68,6 +68,10 @@ mainLoop sock clientInfo = do
         then sendAll (clientSocket (getMaybeClient clientMaybe)) (Byte.pack "exit")
       else putStrLn "Client not found."
       mainLoop sock clientInfo
+    "/disconnectAll" -> do
+      clientList <- readMVar clientInfo
+      mapM_ (\c -> sendAll (clientSocket c) (Byte.pack "exit")) clientList
+      mainLoop sock clientInfo
     _ -> do
       mainLoop sock clientInfo
 
@@ -108,6 +112,7 @@ handleClient sock clientInfo = do
           putStrLn (name ++ " has entered the server!")
           modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
           sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
+          threadDelay 250000
           sendAll (clientSocket currentClient) (Byte.pack "Joined chat room [\"General\"].")
           loop
         -- Private message between two clients
@@ -123,9 +128,12 @@ handleClient sock clientInfo = do
         -- Lets client re-name themselves
         "/name" -> do
           let name = drop (length (head wordsMsg) + 1) msg'
-          putStrLn (clientName currentClient ++ " has changed thier name to " ++ name)
-          modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
-          sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
+          if (length name) > 0
+            then do
+              putStrLn (clientName currentClient ++ " has changed thier name to " ++ name)
+              modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
+              sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
+            else sendAll (clientSocket currentClient) (Byte.pack "Name was empty, save unsuccessfull.")
           loop
         -- Lets client check current saved name
         "/myName" -> do
@@ -183,6 +191,8 @@ handleClient sock clientInfo = do
           loop
 
 -- Helper functions
+
+-- Gets all clients
 
 -- Gets all active chat rooms
 listChatRooms :: [ClientInfo] -> [String] -> [String]
