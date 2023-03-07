@@ -162,17 +162,23 @@ handleClient sock clientInfo = do
         -- Removes client from desired chat room/s
         "/leave" -> do
           let rooms = drop 1 wordsMsg
-          modifyMVar_ clientInfo $ \clients -> return (leaveClientRooms (ClientInfo sock "" rooms) clients)
-          sendAll (clientSocket currentClient) (Byte.pack ("Successfully left chat rooms: " ++ show rooms))
+          if rooms /= []
+            then do
+              modifyMVar_ clientInfo $ \clients -> return (leaveClientRooms (ClientInfo sock "" rooms) clients)
+              sendAll (clientSocket currentClient) (Byte.pack ("Successfully left chat rooms: " ++ show rooms))
+            else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to leave."))
           loop
         -- Adds client to desired chat room/s
         "/join" -> do
           let rooms = drop 1 wordsMsg
-          modifyMVar_ clientInfo $ \clients -> return (addClientRooms (ClientInfo sock "" rooms) clients)
-          mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` rooms 
-            || rooms `isInfixOf` clientRooms c) && clientRooms c /= []) $ sendAll (clientSocket c) 
-            (Byte.pack (clientName currentClient ++ " has joined the chat room!"))) clientList
-          sendAll (clientSocket currentClient) (Byte.pack ("Successfully joined chat rooms: " ++ show rooms))
+          if rooms /= []
+            then do
+              modifyMVar_ clientInfo $ \clients -> return (addClientRooms (ClientInfo sock "" rooms) clients)
+              mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` rooms 
+                || rooms `isInfixOf` clientRooms c) && clientRooms c /= []) $ sendAll (clientSocket c) 
+                (Byte.pack (clientName currentClient ++ " has joined the chat room!"))) clientList
+              sendAll (clientSocket currentClient) (Byte.pack ("Successfully joined chat rooms: " ++ show rooms))
+            else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to join."))
           loop
         -- Client terminated connection
         "exit" -> do
