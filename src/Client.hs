@@ -96,6 +96,7 @@ testLeaveChatRooms :: Socket -> MVar [String] -> IO ()
 testLeaveChatRooms sock msgVar = do
   let command = "/myChatRooms"
   send sock $ Byte.pack command
+  -- Wait for server response
   threadDelay 1000000
   messages <- readMVar msgVar
   let originalRooms = read (head messages) :: [String]
@@ -103,6 +104,7 @@ testLeaveChatRooms sock msgVar = do
   let wordRooms = words rooms
   send sock $ Byte.pack $ "/leave " ++ rooms
   send sock $ Byte.pack command
+  -- Wait for server response
   threadDelay 1000000
   messages' <- readMVar msgVar
   let newRooms = read (head messages') :: [String]
