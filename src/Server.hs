@@ -198,8 +198,6 @@ handleClient sock clientInfo = do
 
 -- Helper functions
 
--- Gets all clients
-
 -- Gets all active chat rooms
 listChatRooms :: [ClientInfo] -> [String] -> [String]
 listChatRooms [] [] = []
