@@ -9,6 +9,7 @@ import System.IO
 import Control.Concurrent
 import System.Timeout
 import Control.Exception
+import Data.List
 
 mainClient :: IO ()
 mainClient = withSocketsDo $ do
@@ -50,6 +51,7 @@ loop sock = do
             -- Start the test suite
             "/test" -> do
               testJoinRooms sock msgVar
+              testLeaveChatRooms sock msgVar
               sendLoop sock msgVar
             -- Otherwise send message and loop
             _ -> do
@@ -87,5 +89,23 @@ testJoinRooms sock msgVar = do
   messages <- readMVar msgVar
   let lastMsg = read (head messages) :: [String]
   if lastMsg == (wordRooms ++ ["General"])
-    then putStrLn "Test Passed"
-  else putStrLn "Test Failed"
+    then putStrLn "Test Join: Passed"
+  else putStrLn "Test Join: Failed"
+
+testLeaveChatRooms :: Socket -> MVar [String] -> IO ()
+testLeaveChatRooms sock msgVar = do
+  let command = "/myChatRooms"
+  send sock $ Byte.pack command
+  threadDelay 1000000
+  messages <- readMVar msgVar
+  let originalRooms = read (head messages) :: [String]
+  let rooms = "Room2 1502 BasketBall"
+  let wordRooms = words rooms
+  send sock $ Byte.pack $ "/leave " ++ rooms
+  send sock $ Byte.pack command
+  threadDelay 1000000
+  messages' <- readMVar msgVar
+  let newRooms = read (head messages') :: [String]
+  if newRooms == (originalRooms \\ wordRooms)
+    then putStrLn "Test Leave: Passed"
+  else putStrLn "Test Leave: Failed"

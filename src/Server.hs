@@ -276,6 +276,6 @@ leaveClientRooms toLeave clientList = do
 leaveClientRoomsHelper :: [String] -> [String] -> [String]
 leaveClientRoomsHelper [] [] = []
 leaveClientRoomsHelper _ [] = []
-leaveClientRoomsHelper [] xs = xs
+leaveClientRoomsHelper [] ys = ys
 leaveClientRoomsHelper (x:xs) (y:ys) | x == y = leaveClientRoomsHelper xs ys
-                                     | otherwise = leaveClientRoomsHelper (x:xs) (y:ys)
+                                     | otherwise = y : leaveClientRoomsHelper (x:xs) ys
