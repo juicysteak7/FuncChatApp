@@ -5,6 +5,10 @@ This is a haskell stack application
 Use the stack command "stack run server"
 
 ### To Run Client
+You must first update the src/Client.hs file and add your computers IP Address
+
+This line specifically: connect sock $ SockAddrInet 3000 $ tupleToHostAddress (xxx, xxx, xxx, xxx)
+
 Use the stack command "stack run client"
 
 ## Example Client Commands
