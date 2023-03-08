@@ -39,7 +39,7 @@ loop sock = do
   sendThread <- forkIO $ sendLoop msgVar
   receiveLoop sendThread msgVar
 
-  -- sendAllLoop needs to be non-blocking IO so when server closes connection the client doen't hang
+  -- sendLoop needs to be non-blocking IO so when server closes connection the client doen't hang
   where
     sendLoop msgVar = do
       inputReady <- hWaitForInput stdin 0
@@ -47,7 +47,7 @@ loop sock = do
         then do
           msg <- hGetLine stdin
           case msg of
-            -- sendAlling signal to close connection from client side
+            -- sending signal to close connection from client side
             "/quit" -> do
              sendAll sock $ Byte.pack "exit"
              putStrLn "Goodbye!"
@@ -57,7 +57,7 @@ loop sock = do
               testLeaveChatRooms sock msgVar
               testChangeName sock msgVar
               sendLoop msgVar
-            -- Otherwise sendAll message and loop
+            -- Otherwise send message and loop
             _ -> do
               sendAll sock $ Byte.pack msg
               sendLoop msgVar
