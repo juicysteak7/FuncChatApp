@@ -12,6 +12,7 @@ import Control.Monad
 import Control.Concurrent 
 import Data.List
 import Control.Exception
+import System.IO
 
 data ClientInfo = ClientInfo 
   {
@@ -39,44 +40,48 @@ mainServer = withSocketsDo $ do
 -- Forked loop that listens for server commands, while the server goes on to accept clients
 mainLoop :: Socket -> MVar [ClientInfo] -> IO ()
 mainLoop sock clientInfo = do
-    msg <- getLine
-    let wordsMsg = words msg
-    if not (null wordsMsg)
-      then do
-        case head wordsMsg of
-          -- Closes server
-          "/quit" -> do
-            putStrLn "Closing Server"
-            close sock
-          -- Allows server communication to specified chat room
-          "/sendTo" -> do
-            let room = wordsMsg !! 1
-            clientList <- readMVar clientInfo
-            let msgToSend = "(Server): " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg
-            mapM_ (\c -> when (room `elem` clientRooms c) $ broadcast (clientSocket c) msgToSend) clientList
-            mainLoop sock clientInfo
-          -- Allows server to communicate to all clients
-          "/sendToAll" -> do
-            clientList <- readMVar clientInfo
-            let msgToSend = "(Server): " ++ drop (length (head wordsMsg) + 1) msg
-            mapM_ (\c -> broadcast (clientSocket c) msgToSend) clientList
-            mainLoop sock clientInfo
-          -- Disconnects a specific client from the server
-          "/disconnect" -> do
-            let client = drop (length (head wordsMsg) + 1) msg
-            clientList <- readMVar clientInfo
-            let clientMaybe = getClientByName client clientList
-            if isJust clientMaybe
-              then broadcast (clientSocket (getMaybeClient clientMaybe)) "exit"
-            else putStrLn "Client not found."
-            mainLoop sock clientInfo
-          "/disconnectAll" -> do
-            clientList <- readMVar clientInfo
-            mapM_ (\c -> broadcast (clientSocket c) "exit") clientList
-            mainLoop sock clientInfo
-          _ -> do
-            mainLoop sock clientInfo
-      else do mainLoop sock clientInfo
+  inputReady <- hWaitForInput stdin 0
+  if inputReady
+    then do
+      msg <- hGetLine stdin
+      let wordsMsg = words msg
+      if not (null wordsMsg)
+        then do
+          case head wordsMsg of
+            -- Closes server
+            "/quit" -> do
+              putStrLn "Closing Server"
+              close sock
+            -- Allows server communication to specified chat room
+            "/sendTo" -> do
+              let room = wordsMsg !! 1
+              clientList <- readMVar clientInfo
+              let msgToSend = "(Server): " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg
+              mapM_ (\c -> when (room `elem` clientRooms c) $ broadcast (clientSocket c) msgToSend) clientList
+              mainLoop sock clientInfo
+            -- Allows server to communicate to all clients
+            "/sendToAll" -> do
+              clientList <- readMVar clientInfo
+              let msgToSend = "(Server): " ++ drop (length (head wordsMsg) + 1) msg
+              mapM_ (\c -> broadcast (clientSocket c) msgToSend) clientList
+              mainLoop sock clientInfo
+            -- Disconnects a specific client from the server
+            "/disconnect" -> do
+              let client = drop (length (head wordsMsg) + 1) msg
+              clientList <- readMVar clientInfo
+              let clientMaybe = getClientByName client clientList
+              if isJust clientMaybe
+                then broadcast (clientSocket (getMaybeClient clientMaybe)) "exit"
+              else putStrLn "Client not found."
+              mainLoop sock clientInfo
+            "/disconnectAll" -> do
+              clientList <- readMVar clientInfo
+              mapM_ (\c -> broadcast (clientSocket c) "exit") clientList
+              mainLoop sock clientInfo
+            _ -> do
+              mainLoop sock clientInfo
+        else do mainLoop sock clientInfo
+    else do mainLoop sock clientInfo
 
 -- Accept client loop, adds clients to the client MVar
 acceptLoop :: Socket -> MVar [ClientInfo] -> IO ()
