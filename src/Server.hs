@@ -101,14 +101,12 @@ acceptLoop serverSock clientInfo = do
 -- The forked individual client handler
 handleClient :: Socket -> MVar [ClientInfo] -> IO ()
 handleClient sock clientInfo = do
-
   -- loop to receive and broadcast messages
   loop
   where
     loop = do
       clientList <- readMVar clientInfo
       let currentClient = getCurrentClient sock clientList
-
       msg <- try (recv sock 1024) :: IO (Either SomeException Byte.ByteString)
       case msg of
         Left e -> do
@@ -210,13 +208,11 @@ handleClient sock clientInfo = do
               loop
 
 -- Helper functions
-
 -- Gets all active chat rooms
 listChatRooms :: [ClientInfo] -> [String] -> [String]
 listChatRooms [] [] = []
 listChatRooms [] rooms = nub rooms
 listChatRooms (c:cs) rooms = listChatRooms cs (clientRooms c ++ rooms)
-
 
 -- Lists all clients in a chatroom
 listClients :: String -> [ClientInfo] -> [String]

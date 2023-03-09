@@ -33,13 +33,11 @@ mainClient = withSocketsDo $ do
 loop :: Socket -> IO ()
 loop sock = do
   msgVar <- newMVar []
-
   -- Get name from client
   putStrLn "Please enter your name."
   name <- getLine
 
   trySend <- try (sendAll sock (Byte.pack ("/init " ++ name))) :: IO (Either SomeException ())
-
   case trySend of
     Left e -> putStrLn $ "Error initiating name: " ++ show e
     Right _ -> pure ()
