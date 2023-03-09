@@ -100,8 +100,8 @@ handleClient sock clientInfo = do
   loop
   where
     loop = do
-      clientList <- readMVar clientInfo
-      let currentClient = getCurrentClient sock clientList
+      clientList' <- readMVar clientInfo
+      let currentClient = getCurrentClient sock clientList'
       msg <- try (recv sock 1024) :: IO (Either SomeException Byte.ByteString)
       case msg of
         Left e -> do
@@ -123,6 +123,7 @@ handleClient sock clientInfo = do
               loop
             -- Private message between two clients
             "/whisper" -> do
+              clientList <- readMVar clientInfo
               let maybeClient = getClientByMsg msg' clientList
               if isJust maybeClient 
                 then do
@@ -152,10 +153,12 @@ handleClient sock clientInfo = do
               loop
             -- Lists all active chat rooms on server
             "/chatRooms" -> do
+              clientList <- readMVar clientInfo
               broadcast (clientSocket currentClient) (show (listChatRooms clientList []))
               loop
             -- Allows client to sent to a specific chat room
             "/sendTo" -> do
+              clientList <- readMVar clientInfo
               let room = wordsMsg !! 1
               let msgToSend = "[" ++ show room ++ "] " ++ clientName currentClient ++ ": " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg'
               mapM_ (\c -> when (clientSocket c /= sock && room `elem` clientRooms c) $ broadcast (clientSocket c) msgToSend ) clientList
@@ -163,6 +166,7 @@ handleClient sock clientInfo = do
             -- Lists all members of specific chat room
             "/members" -> do
               let room = wordsMsg !! 1
+              clientList <- readMVar clientInfo
               broadcast (clientSocket currentClient) (show (listClients room clientList))
               loop
             -- Removes client from desired chat room/s
@@ -170,9 +174,9 @@ handleClient sock clientInfo = do
               let rooms = drop 1 wordsMsg
               if rooms /= []
                 then do
-                  clientList' <- readMVar clientInfo
+                  clientList <- readMVar clientInfo
                   mapM_ (\c -> when (clientSocket c /= sock && hasCommonElements (clientRooms c) rooms && clientRooms c /= []) 
-                    $ broadcast (clientSocket c) (clientName currentClient ++ " has left the chat room!")) clientList'
+                    $ broadcast (clientSocket c) (clientName currentClient ++ " has left the chat room!")) clientList
                   modifyMVar_ clientInfo $ \clients -> return (leaveClientRooms (ClientInfo sock "" rooms) clients)
                   broadcast (clientSocket currentClient) ("Successfully left chat rooms: " ++ show rooms)
                 else broadcast (clientSocket currentClient) ("Please enter a chat room to leave.")
@@ -183,9 +187,9 @@ handleClient sock clientInfo = do
               if rooms /= []
                 then do
                   modifyMVar_ clientInfo $ \clients -> return (addClientRooms (ClientInfo sock "" rooms) clients)
-                  clientList' <- readMVar clientInfo
+                  clientList <- readMVar clientInfo
                   mapM_ (\c -> when (clientSocket c /= sock && hasCommonElements (clientRooms c) rooms && clientRooms c /= []) 
-                    $ broadcast (clientSocket c) (clientName currentClient ++ " has joined the chat room!")) clientList'
+                    $ broadcast (clientSocket c) (clientName currentClient ++ " has joined the chat room!")) clientList
                   broadcast (clientSocket currentClient) ("Successfully joined chat rooms: " ++ show rooms)
                 else broadcast (clientSocket currentClient) ("Please enter a chat room to join.")
               loop
@@ -197,6 +201,7 @@ handleClient sock clientInfo = do
             -- Relay message. Don't send to self, or chat rooms you aren't in. Clients in empty chat rooms shouldn't see
             -- into other chat rooms, but should see other clients in empty chat rooms
             _ -> do
+              clientList <- readMVar clientInfo
               putStrLn (clientName currentClient ++ ": " ++ msg')
               mapM_ (\c -> when (clientSocket c /= sock && hasCommonElements (clientRooms c) (clientRooms currentClient)
                 && (null (clientRooms c) && null (clientRooms currentClient) || clientRooms c /= [] && clientRooms currentClient /= [])) 
@@ -234,12 +239,7 @@ listClients room clientList = do
 
 -- Gets matching chat rooms from two clients rooms
 getMatchingRooms :: [String] -> [String] -> [String]
-getMatchingRooms rooms1 rooms2 = do
-  room1 <- rooms1
-  room2 <- rooms2
-  if room1 == room2
-    then return room1
-  else []
+getMatchingRooms xs ys = filter (`elem` ys) xs
 
 -- Removes client from list of clients
 removeClients :: ClientInfo -> [ClientInfo] -> [ClientInfo]

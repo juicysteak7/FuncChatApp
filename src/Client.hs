@@ -24,11 +24,12 @@ mainClient = withSocketsDo $ do
   connected <- try (connect sock $ SockAddrInet 3000 $ tupleToHostAddress (10, 200, 224, 219)) :: IO (Either SomeException ())
   case connected of
     Left e -> putStrLn $ "Error connecting: " ++ show e
-    Right _ -> putStrLn "Connected to server!"
+    Right _ -> do 
+      putStrLn "Connected to server!"
+      loop sock
 
 
   -- read and sendAll messages to the server until the user types "/quit"
-  loop sock
 
 loop :: Socket -> IO ()
 loop sock = do
