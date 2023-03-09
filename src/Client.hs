@@ -18,14 +18,14 @@ mainClient = withSocketsDo $ do
   -- connect to the server
 
   -- Desktop IP Address
-  connected <- try (connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)) :: IO (Either SomeException ())
+  --connected <- try (connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)) :: IO (Either SomeException ())
 
+  -- Laptop IP Address @ School
+  connected <- try (connect sock $ SockAddrInet 3000 $ tupleToHostAddress (10, 200, 224, 219)) :: IO (Either SomeException ())
   case connected of
     Left e -> putStrLn $ "Error connecting: " ++ show e
     Right _ -> putStrLn "Connected to server!"
 
-  -- Laptop IP Address @ School
-  -- connect sock $ SockAddrInet 3000 $ tupleToHostAddress (10, 200, 224, 219)
 
   -- read and sendAll messages to the server until the user types "/quit"
   loop sock
