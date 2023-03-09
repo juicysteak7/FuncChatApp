@@ -11,6 +11,8 @@ import Data.Maybe
 import Control.Monad
 import Control.Concurrent 
 import Data.List
+import Control.Exception
+import System.IO
 
 data ClientInfo = ClientInfo 
   {
@@ -38,42 +40,48 @@ mainServer = withSocketsDo $ do
 -- Forked loop that listens for server commands, while the server goes on to accept clients
 mainLoop :: Socket -> MVar [ClientInfo] -> IO ()
 mainLoop sock clientInfo = do
-  msg <- getLine
-  let wordsMsg = words msg
-
-  case head wordsMsg of
-    -- Closes server
-    "/quit" -> do
-      putStrLn "Closing Server"
-      close sock
-    -- Allows server communication to specified chat room
-    "/sendTo" -> do
-      let room = wordsMsg !! 1
-      clientList <- readMVar clientInfo
-      let msgToSend = Byte.pack $ "(Server): " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg
-      mapM_ (\c -> when (room `elem` clientRooms c) $ sendAll (clientSocket c) msgToSend) clientList
-      mainLoop sock clientInfo
-    -- Allows server to communicate to all clients
-    "/sendToAll" -> do
-      clientList <- readMVar clientInfo
-      let msgToSend = Byte.pack $ "(Server): " ++ drop (length (head wordsMsg) + 1) msg
-      mapM_ (\c -> sendAll (clientSocket c) msgToSend) clientList
-      mainLoop sock clientInfo
-    -- Disconnects a specific client from the server
-    "/disconnect" -> do
-      let client = drop (length (head wordsMsg) + 1) msg
-      clientList <- readMVar clientInfo
-      let clientMaybe = getClientByName client clientList
-      if isJust clientMaybe
-        then sendAll (clientSocket (getMaybeClient clientMaybe)) (Byte.pack "exit")
-      else putStrLn "Client not found."
-      mainLoop sock clientInfo
-    "/disconnectAll" -> do
-      clientList <- readMVar clientInfo
-      mapM_ (\c -> sendAll (clientSocket c) (Byte.pack "exit")) clientList
-      mainLoop sock clientInfo
-    _ -> do
-      mainLoop sock clientInfo
+  inputReady <- hWaitForInput stdin 0
+  if inputReady
+    then do
+      msg <- hGetLine stdin
+      let wordsMsg = words msg
+      if not (null wordsMsg)
+        then do
+          case head wordsMsg of
+            -- Closes server
+            "/quit" -> do
+              putStrLn "Closing Server"
+              close sock
+            -- Allows server communication to specified chat room
+            "/sendTo" -> do
+              let room = wordsMsg !! 1
+              clientList <- readMVar clientInfo
+              let msgToSend = Byte.pack $ "(Server): " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg
+              mapM_ (\c -> when (room `elem` clientRooms c) $ sendAll (clientSocket c) msgToSend) clientList
+              mainLoop sock clientInfo
+            -- Allows server to communicate to all clients
+            "/sendToAll" -> do
+              clientList <- readMVar clientInfo
+              let msgToSend = Byte.pack $ "(Server): " ++ drop (length (head wordsMsg) + 1) msg
+              mapM_ (\c -> sendAll (clientSocket c) msgToSend) clientList
+              mainLoop sock clientInfo
+            -- Disconnects a specific client from the server
+            "/disconnect" -> do
+              let client = drop (length (head wordsMsg) + 1) msg
+              clientList <- readMVar clientInfo
+              let clientMaybe = getClientByName client clientList
+              if isJust clientMaybe
+                then sendAll (clientSocket (getMaybeClient clientMaybe)) (Byte.pack "exit")
+              else putStrLn "Client not found."
+              mainLoop sock clientInfo
+            "/disconnectAll" -> do
+              clientList <- readMVar clientInfo
+              mapM_ (\c -> sendAll (clientSocket c) (Byte.pack "exit")) clientList
+              mainLoop sock clientInfo
+            _ -> do
+              mainLoop sock clientInfo
+        else do mainLoop sock clientInfo
+    else do mainLoop sock clientInfo
 
 -- Accept client loop, adds clients to the client MVar
 acceptLoop :: Socket -> MVar [ClientInfo] -> IO ()
@@ -98,103 +106,108 @@ handleClient sock clientInfo = do
   loop
   where
     loop = do
-      msg <- recv sock 1024
-      let msg' = Byte.unpack msg
-      let wordsMsg = words msg'
-
       clientList <- readMVar clientInfo
       let currentClient = getCurrentClient sock clientList
 
-      case head wordsMsg of
-        -- Save inital name givin to server
-        "/init" -> do
-          let name = drop (length (head wordsMsg) + 1) msg'
-          putStrLn (name ++ " has entered the server!")
-          modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
-          sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
-          threadDelay 250000
-          sendAll (clientSocket currentClient) (Byte.pack "Joined chat room [\"General\"].")
-          loop
-        -- Private message between two clients
-        "/whisper" -> do
-          let maybeClient = getClientByMsg msg' clientList
-          if isJust maybeClient 
-            then do
-              let client = getMaybeClient maybeClient
-              let msg'' = drop (length (head wordsMsg) + length (clientName client) + 2) msg'
-              sendAll (clientSocket client) (Byte.pack ("(Whisper) " ++ clientName currentClient ++ ": " ++ msg''))
-          else sendAll (clientSocket currentClient) (Byte.pack "Client not found.")
-          loop
-        -- Lets client re-name themselves
-        "/name" -> do
-          let name = drop (length (head wordsMsg) + 1) msg'
-          if (length name) > 0
-            then do
-              putStrLn (clientName currentClient ++ " has changed thier name to " ++ name)
-              modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
-              sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
-            else sendAll (clientSocket currentClient) (Byte.pack "Name was empty, save unsuccessfull.")
-          loop
-        -- Lets client check current saved name
-        "/myName" -> do
-          let name = clientName currentClient
-          sendAll (clientSocket currentClient) (Byte.pack ("Your saved name is: " ++ name))
-          loop
-        -- List all current client chat rooms
-        "/myChatRooms" -> do
-          sendAll (clientSocket currentClient) (Byte.pack (show (clientRooms currentClient)))
-          loop
-        -- Lists all active chat rooms on server
-        "/chatRooms" -> do
-          sendAll (clientSocket currentClient) (Byte.pack (show (listChatRooms clientList [])))
-          loop
-        -- Allows client to sent to a specific chat room
-        "/sendTo" -> do
-          let room = wordsMsg !! 1
-          let msgToSend = Byte.pack $ "[" ++ show room ++ "] " ++ clientName currentClient ++ ": " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg'
-          mapM_ (\c -> when (clientSocket c /= sock && room `elem` clientRooms c) $ sendAll (clientSocket c) msgToSend) clientList
-          loop
-        -- Lists all members of specific chat room
-        "/members" -> do
-          let room = wordsMsg !! 1
-          sendAll (clientSocket currentClient) (Byte.pack (show (listClients room clientList)))
-          loop
-        -- Removes client from desired chat room/s
-        "/leave" -> do
-          let rooms = drop 1 wordsMsg
-          if rooms /= []
-            then do
-              modifyMVar_ clientInfo $ \clients -> return (leaveClientRooms (ClientInfo sock "" rooms) clients)
-              sendAll (clientSocket currentClient) (Byte.pack ("Successfully left chat rooms: " ++ show rooms))
-            else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to leave."))
-          loop
-        -- Adds client to desired chat room/s
-        "/join" -> do
-          let rooms = drop 1 wordsMsg
-          if rooms /= []
-            then do
-              modifyMVar_ clientInfo $ \clients -> return (addClientRooms (ClientInfo sock "" rooms) clients)
-              mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` rooms 
-                || rooms `isInfixOf` clientRooms c) && clientRooms c /= []) $ sendAll (clientSocket c) 
-                (Byte.pack (clientName currentClient ++ " has joined the chat room!"))) clientList
-              sendAll (clientSocket currentClient) (Byte.pack ("Successfully joined chat rooms: " ++ show rooms))
-            else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to join."))
-          loop
-        -- Client terminated connection
-        "exit" -> do
-          putStrLn  $ clientName currentClient ++ " has disconnected from server."
+      msg <- try (recv sock 1024) :: IO (Either SomeException Byte.ByteString)
+      case msg of
+        Left e -> do
+          putStrLn $ "Client " ++ clientName currentClient ++ " Disconneted: " ++ show e
           modifyMVar_ clientInfo $ \clients -> return (removeClients currentClient clients)
           close sock
-        -- Relay message. Don't send to self, or chat rooms you aren't in. Clients in empty chat rooms shouldn't see
-        -- into other chat rooms, but should see other clients in empty chat rooms
-        _ -> do
-          putStrLn (clientName currentClient ++ ": " ++ msg')
-          mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` clientRooms currentClient 
-            || clientRooms currentClient `isInfixOf` clientRooms c) 
-            && (null (clientRooms c) && null (clientRooms currentClient) || clientRooms c /= [] && clientRooms currentClient /= [])) 
-            $ sendAll (clientSocket c) (Byte.pack (show (getMatchingRooms (clientRooms c) (clientRooms currentClient)) 
-            ++ " " ++ clientName currentClient ++ ": " ++ msg'))) clientList
-          loop
+        Right m -> do
+          let msg' = Byte.unpack m
+          let wordsMsg = words msg'
+          case head wordsMsg of
+            -- Save inital name givin to server
+            "/init" -> do
+              let name = drop (length (head wordsMsg) + 1) msg'
+              putStrLn (name ++ " has entered the server!")
+              modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
+              sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
+              threadDelay 250000
+              sendAll (clientSocket currentClient) (Byte.pack "Joined chat room [\"General\"].")
+              loop
+            -- Private message between two clients
+            "/whisper" -> do
+              let maybeClient = getClientByMsg msg' clientList
+              if isJust maybeClient 
+                then do
+                  let client = getMaybeClient maybeClient
+                  let msg'' = drop (length (head wordsMsg) + length (clientName client) + 2) msg'
+                  sendAll (clientSocket client) (Byte.pack ("(Whisper) " ++ clientName currentClient ++ ": " ++ msg''))
+              else sendAll (clientSocket currentClient) (Byte.pack "Client not found.")
+              loop
+            -- Lets client re-name themselves
+            "/name" -> do
+              let name = drop (length (head wordsMsg) + 1) msg'
+              if not (null name)
+                then do
+                  putStrLn (clientName currentClient ++ " has changed thier name to " ++ name)
+                  modifyMVar_ clientInfo $ \clients -> return (editClientName (ClientInfo sock name (clientRooms currentClient)) clients)
+                  sendAll (clientSocket currentClient) (Byte.pack "Successfully saved name.")
+                else sendAll (clientSocket currentClient) (Byte.pack "Name was empty, save unsuccessfull.")
+              loop
+            -- Lets client check current saved name
+            "/myName" -> do
+              let name = clientName currentClient
+              sendAll (clientSocket currentClient) (Byte.pack ("Your saved name is: " ++ name))
+              loop
+            -- List all current client chat rooms
+            "/myChatRooms" -> do
+              sendAll (clientSocket currentClient) (Byte.pack (show (clientRooms currentClient)))
+              loop
+            -- Lists all active chat rooms on server
+            "/chatRooms" -> do
+              sendAll (clientSocket currentClient) (Byte.pack (show (listChatRooms clientList [])))
+              loop
+            -- Allows client to sent to a specific chat room
+            "/sendTo" -> do
+              let room = wordsMsg !! 1
+              let msgToSend = Byte.pack $ "[" ++ show room ++ "] " ++ clientName currentClient ++ ": " ++ drop (length (head wordsMsg) + length (wordsMsg !! 1) + 2) msg'
+              mapM_ (\c -> when (clientSocket c /= sock && room `elem` clientRooms c) $ sendAll (clientSocket c) msgToSend) clientList
+              loop
+            -- Lists all members of specific chat room
+            "/members" -> do
+              let room = wordsMsg !! 1
+              sendAll (clientSocket currentClient) (Byte.pack (show (listClients room clientList)))
+              loop
+            -- Removes client from desired chat room/s
+            "/leave" -> do
+              let rooms = drop 1 wordsMsg
+              if rooms /= []
+                then do
+                  modifyMVar_ clientInfo $ \clients -> return (leaveClientRooms (ClientInfo sock "" rooms) clients)
+                  sendAll (clientSocket currentClient) (Byte.pack ("Successfully left chat rooms: " ++ show rooms))
+                else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to leave."))
+              loop
+            -- Adds client to desired chat room/s
+            "/join" -> do
+              let rooms = drop 1 wordsMsg
+              if rooms /= []
+                then do
+                  modifyMVar_ clientInfo $ \clients -> return (addClientRooms (ClientInfo sock "" rooms) clients)
+                  mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` rooms 
+                    || rooms `isInfixOf` clientRooms c) && clientRooms c /= []) $ sendAll (clientSocket c) 
+                    (Byte.pack (clientName currentClient ++ " has joined the chat room!"))) clientList
+                  sendAll (clientSocket currentClient) (Byte.pack ("Successfully joined chat rooms: " ++ show rooms))
+                else sendAll (clientSocket currentClient) (Byte.pack ("Please enter a chat room to join."))
+              loop
+            -- Client terminated connection
+            "exit" -> do
+              putStrLn  $ clientName currentClient ++ " has disconnected from server."
+              modifyMVar_ clientInfo $ \clients -> return (removeClients currentClient clients)
+              close sock
+            -- Relay message. Don't send to self, or chat rooms you aren't in. Clients in empty chat rooms shouldn't see
+            -- into other chat rooms, but should see other clients in empty chat rooms
+            _ -> do
+              putStrLn (clientName currentClient ++ ": " ++ msg')
+              mapM_ (\c -> when (clientSocket c /= sock && (clientRooms c `isInfixOf` clientRooms currentClient 
+                || clientRooms currentClient `isInfixOf` clientRooms c) 
+                && (null (clientRooms c) && null (clientRooms currentClient) || clientRooms c /= [] && clientRooms currentClient /= [])) 
+                $ sendAll (clientSocket c) (Byte.pack (show (getMatchingRooms (clientRooms c) (clientRooms currentClient)) 
+                ++ " " ++ clientName currentClient ++ ": " ++ msg'))) clientList
+              loop
 
 -- Helper functions
 

@@ -8,6 +8,7 @@ import qualified Data.ByteString.Char8 as Byte
 import System.IO
 import Control.Concurrent
 import Data.List
+import Control.Exception
 
 mainClient :: IO ()
 mainClient = withSocketsDo $ do
@@ -17,7 +18,11 @@ mainClient = withSocketsDo $ do
   -- connect to the server
 
   -- Desktop IP Address
-  connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)
+  connected <- try (connect sock $ SockAddrInet 3000 $ tupleToHostAddress (192, 168, 1, 8)) :: IO (Either SomeException ())
+
+  case connected of
+    Left e -> putStrLn $ "Error connecting: " ++ show e
+    Right _ -> putStrLn "Connected to server!"
 
   -- Laptop IP Address @ School
   -- connect sock $ SockAddrInet 3000 $ tupleToHostAddress (10, 200, 224, 219)
@@ -28,13 +33,16 @@ mainClient = withSocketsDo $ do
 loop :: Socket -> IO ()
 loop sock = do
   msgVar <- newMVar []
-  putStrLn "Connected!"
 
   -- Get name from client
   putStrLn "Please enter your name."
   name <- getLine
 
-  sendAll sock $ Byte.pack $ "/init " ++ name
+  trySend <- try (sendAll sock (Byte.pack ("/init " ++ name))) :: IO (Either SomeException ())
+
+  case trySend of
+    Left e -> putStrLn $ "Error initiating name: " ++ show e
+    Right _ -> pure ()
 
   sendThread <- forkIO $ sendLoop msgVar
   receiveLoop sendThread msgVar
@@ -59,27 +67,33 @@ loop sock = do
               sendLoop msgVar
             -- Otherwise send message and loop
             _ -> do
-              sendAll sock $ Byte.pack msg
+              trySend' <- try (sendAll sock (Byte.pack msg)) :: IO (Either SomeException ())
+              case trySend' of
+                Left e -> putStrLn $ "Error sending message: " ++ show e
+                Right _ -> pure ()
               sendLoop msgVar
-      else do sendLoop msgVar
+        else do sendLoop msgVar
 
     receiveLoop sendThread msgVar = do
-      response <- recv sock 1024
-      let msg = Byte.unpack response
-      if Byte.null response
-        then putStrLn "Server closed the connection."
-        else do
-          case msg of
-            -- Server force closing connection
-            "exit" -> do
-              sendAll sock $ Byte.pack "exit"
-              putStrLn "Server closed the connection."
-              killThread sendThread
-            -- Otherwise print message and loop
-            _ -> do
-              putStrLn msg
-              modifyMVar_ msgVar (\messages -> return (msg : messages))
-              receiveLoop sendThread msgVar
+      response <- try (recv sock 1024) :: IO (Either SomeException Byte.ByteString)
+      case response of
+        Left e -> putStrLn $ "Server Connection Closed: " ++ show e
+        Right m -> do
+          let msg = Byte.unpack m
+          if Byte.null m
+            then putStrLn "Server closed the connection."
+            else do
+              case msg of
+                -- Server force closing connection
+                "exit" -> do
+                  sendAll sock $ Byte.pack "exit"
+                  putStrLn "Server closed the connection."
+                  killThread sendThread
+                -- Otherwise print message and loop
+                _ -> do
+                  putStrLn msg
+                  modifyMVar_ msgVar (\messages -> return (msg : messages))
+                  receiveLoop sendThread msgVar
 
 -- Test Functions
 testJoinRooms :: Socket -> MVar [String] -> IO ()
