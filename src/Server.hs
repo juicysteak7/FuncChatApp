@@ -214,10 +214,9 @@ handleClient sock clientInfo = do
 -- Gets all active chat rooms
 listChatRooms :: [ClientInfo] -> [String] -> [String]
 listChatRooms [] [] = []
-listChatRooms (c:cs) [] = listChatRooms cs (clientRooms c)
-listChatRooms [] rooms = rooms
-listChatRooms (c:cs) rooms | clientRooms c `isInfixOf` rooms || rooms `isInfixOf` clientRooms c = listChatRooms cs rooms
-                           | otherwise = listChatRooms cs (clientRooms c ++ rooms)
+listChatRooms [] rooms = nub rooms
+listChatRooms (c:cs) rooms = listChatRooms cs (clientRooms c ++ rooms)
+
 
 -- Lists all clients in a chatroom
 listClients :: String -> [ClientInfo] -> [String]
