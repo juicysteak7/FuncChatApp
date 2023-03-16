@@ -51,6 +51,8 @@ mainLoop sock clientInfo = do
             -- Closes server
             "/quit" -> do
               putStrLn "Closing Server"
+              clientList <- readMVar clientInfo
+              mapM_ (\c -> broadcast (clientSocket c) "exit") clientList
               close sock
             -- Allows server communication to specified chat room
             "/sendTo" -> do
