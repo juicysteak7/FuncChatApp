@@ -1,6 +1,11 @@
 # Haskell Chat (IRC) App
 This is a haskell stack chat application.
 
+## To Build Application
+Make sure to install latest version of stack
+
+Run "stack build"
+
 ### To Run Server
 Use the stack command "stack run server"
 
