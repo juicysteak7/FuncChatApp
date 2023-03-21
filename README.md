@@ -4,11 +4,14 @@ This is a haskell stack chat application.
 This application uses a client/server architecture
 
 Each client connects to a server that will either execute user commands, or relay messages.
-[Example Commands](#example-client-commands)
+
+[Example Client Commands](#example-client-commands)
 
 The server will keep a list of connected clients, relay messages back and forth between clients, and execute user commands.
 
 The server also listens for server commands.
+
+[Example Server Commands](#example-server-commands)
 
 ### To Build Application
 Make sure to install latest version of stack
